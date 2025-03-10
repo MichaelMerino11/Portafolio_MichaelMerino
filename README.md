@@ -92,4 +92,4 @@ Thumbs.db
 .vscode/
 .idea/
 
-Si estás utilizando algún editor como VSCode o WebStorm, también podrías agregar las carpetas que contienen configuraciones de tu editor (como `.vscode/` o `.idea/`).
+Si estás utilizando algún editor como VSCode o WebStorm, también podrías implementar las carpetas que contienen configuraciones de tu editor (como `.vscode/` o `.idea/`).

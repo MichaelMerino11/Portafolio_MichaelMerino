@@ -28,7 +28,7 @@ app.post("/send-email", async (req, res) => {
     subject: `Mensaje de ${name}`,
     text: message,
   };
-
+//validacion de correo
   try {
     await transporter.sendMail(mailOptions);
     res.status(200).json({ message: "Correo enviado con éxito" });
