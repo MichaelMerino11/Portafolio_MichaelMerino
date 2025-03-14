@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import nodemailer from "nodemailer";
+import { body, validationResult } from "express-validator"; // 🔹 Importamos express-validator
 
 dotenv.config();
 
@@ -11,15 +12,50 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// 🔹 Asegurar que Render reconoce la API
+// 🔹 Ruta de prueba para Render
 app.get("/", (req, res) => {
   res.send("🚀 API corriendo correctamente en Render");
 });
 
-// 🔹 Ruta para enviar correos
-app.post("/send-email", async (req, res) => {
+// 🔹 Validaciones antes de procesar el correo
+const validateContactForm = [
+  body("name")
+    .trim()
+    .notEmpty()
+    .withMessage("El nombre es obligatorio")
+    .isLength({ min: 3, max: 50 })
+    .withMessage("El nombre debe tener entre 3 y 50 caracteres")
+    .matches(/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/)
+    .withMessage("El nombre solo puede contener letras y espacios"),
+
+  body("email")
+    .trim()
+    .isEmail()
+    .withMessage("Debe ser un correo electrónico válido")
+    .normalizeEmail()
+    .matches(/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/)
+    .withMessage("Formato de correo inválido"),
+
+  body("message")
+    .trim()
+    .notEmpty()
+    .withMessage("El mensaje no puede estar vacío")
+    .isLength({ min: 10, max: 500 })
+    .withMessage("El mensaje debe tener entre 10 y 500 caracteres")
+    .matches(/^[a-zA-Z0-9áéíóúÁÉÍÓÚñÑ,.!?()@#\s]+$/)
+    .withMessage("El mensaje contiene caracteres no permitidos"),
+];
+
+// 🔹 Ruta para enviar correos con validaciones
+app.post("/send-email", validateContactForm, async (req, res) => {
   console.log("📩 Recibida petición en /send-email");
-  console.log("🔹 Datos recibidos:", req.body);
+
+  // 🔹 Verificar errores de validación
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    console.log("❌ Errores en el formulario:", errors.array());
+    return res.status(400).json({ errors: errors.array() });
+  }
 
   const { name, email, message } = req.body;
 
