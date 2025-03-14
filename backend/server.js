@@ -32,18 +32,14 @@ const validateContactForm = [
     .trim()
     .isEmail()
     .withMessage("Debe ser un correo electrónico válido")
-    .normalizeEmail()
-    .matches(/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/)
-    .withMessage("Formato de correo inválido"),
+    .normalizeEmail(),
 
   body("message")
     .trim()
     .notEmpty()
     .withMessage("El mensaje no puede estar vacío")
     .isLength({ min: 10, max: 500 })
-    .withMessage("El mensaje debe tener entre 10 y 500 caracteres")
-    .matches(/^[a-zA-Z0-9áéíóúÁÉÍÓÚñÑ,.!?()@#\s]+$/)
-    .withMessage("El mensaje contiene caracteres no permitidos"),
+    .withMessage("El mensaje debe tener entre 10 y 500 caracteres"),
 ];
 
 // 🔹 Ruta para enviar correos con validaciones
