@@ -73,7 +73,7 @@ app.post("/send-email", validateContactForm, async (req, res) => {
   try {
     console.log("🚀 Enviando correo...");
     await transporter.sendMail(mailOptions);
-    console.log("✅ Correo enviado con éxito");
+    console.log("✅ Correo enviado con éxitoaaaaaa");
     res.status(200).json({ message: "Correo enviado con éxito" });
   } catch (error) {
     console.error("❌ Error al enviar correo:", error);
