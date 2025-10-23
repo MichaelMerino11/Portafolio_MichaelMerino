@@ -43,6 +43,7 @@ const validateContactForm = [
 ];
 
 // 🔹 Ruta para enviar correos con validaciones
+// 🔹 Ruta para enviar correos con validaciones
 app.post("/send-email", validateContactForm, async (req, res) => {
   console.log("📩 Recibida petición en /send-email");
 
@@ -59,16 +60,37 @@ app.post("/send-email", validateContactForm, async (req, res) => {
     service: "gmail",
     auth: {
       user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
+      pass: process.env.EMAIL_PASS, // Asegúrate de que esta sea la NUEVA contraseña de app
     },
   });
 
   const mailOptions = {
-    from: email,
-    to: process.env.EMAIL_USER,
-    subject: `Mensaje de ${name}`,
-    text: message,
+    from: `"Tu Portafolio" <${process.env.EMAIL_USER}>`, // 👈 Envía desde tu propio email
+    to: process.env.EMAIL_USER, // 👈 Recibes el correo en tu email
+    replyTo: email, // 👈 Para poder responder al visitante
+    subject: `Nuevo Mensaje de Portafolio de: ${name}`, // 👈 Asunto mejorado
+
+    // 👈 Cuerpo del mensaje mejorado para incluir toda la info
+    text: `Has recibido un nuevo mensaje de tu portafolio:
+    
+    Nombre: ${name}
+    Email: ${email}
+    
+    Mensaje:
+    ${message}
+    `,
+
+    // (Opcional) Versión HTML para que se vea mejor
+    html: `
+      <h3>Nuevo Mensaje del Portafolio</h3>
+      <p><strong>Nombre:</strong> ${name}</p>
+      <p><strong>Email:</strong> ${email}</p>
+      <hr />
+      <p><strong>Mensaje:</strong></p>
+      <p>${message.replace(/\n/g, "<br>")}</p>
+    `,
   };
+  // --- 👆 FIN DE LA CORRECCIÓN ---
 
   try {
     console.log("🚀 Enviando correo...");
@@ -76,7 +98,8 @@ app.post("/send-email", validateContactForm, async (req, res) => {
     console.log("✅ Correo enviado con éxito");
     res.status(200).json({ message: "Correo enviado con éxito" });
   } catch (error) {
-    console.error("❌ ErrorSASO al enviar correo:", error);
+    console.error("❌ Error al enviar correo:", error);
+    // Errores comunes son: contraseña de app inválida, o cuenta bloqueada por seguridad.
     res.status(500).json({ error: "Error al enviar el correo" });
   }
 });
