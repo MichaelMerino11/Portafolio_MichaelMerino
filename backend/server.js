@@ -56,12 +56,19 @@ app.post("/send-email", validateContactForm, async (req, res) => {
 
   const { name, email, message } = req.body;
 
+  // En lugar de service: "gmail"
   const transporter = nodemailer.createTransport({
-    service: "gmail",
+    host: "smtp.gmail.com",
+    port: 465, // Este es el puerto SSL de Gmail
+    secure: true, // Usar SSL
     auth: {
       user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS, // Asegúrate de que esta sea la NUEVA contraseña de app
+      pass: process.env.EMAIL_PASS, // La contraseña SIN espacios
     },
+    // Agregamos esto para ver si hay problemas de timeout
+    connectionTimeout: 10000, // 10 segundos
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
   });
 
   const mailOptions = {
