@@ -14,7 +14,7 @@ const corsOptions = {
   origin: [
     "http://localhost:3000",
     "http://localhost:5173",
-    "https://tu-dominio-frontend.vercel.app", // Reemplaza con tu dominio de Vercel
+    "https://portafolio-michael-merino-wqho.vercel.app/",
     /\.vercel\.app$/, // Permite cualquier subdominio de vercel.app
   ],
   methods: ["POST", "GET", "OPTIONS"],
