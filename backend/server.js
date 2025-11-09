@@ -7,72 +7,88 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 10000;
 
-// Configuración de CORS
-const corsOptions = {
-  origin: [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "https://portafolio-michael-merino-wqho.vercel.app/",
-    /\.vercel\.app$/, // Permite cualquier subdominio de vercel.app
-  ],
-  methods: ["POST", "GET", "OPTIONS"],
-  credentials: true,
-  optionsSuccessStatus: 200,
-};
+// CORS más permisivo para debug
+app.use(
+  cors({
+    origin: "*", // Temporalmente permite todo para debug
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  })
+);
 
-app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Configuración de Nodemailer con opciones adicionales para Gmail
+// Log de todas las peticiones
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+  console.log("Body:", req.body);
+  next();
+});
+
+// Configuración de Nodemailer para Gmail
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
-  port: 587,
-  secure: false, // true para 465, false para otros puertos
+  port: 465,
+  secure: true,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
   tls: {
     rejectUnauthorized: false,
-    ciphers: "SSLv3",
   },
-  connectionTimeout: 10000, // 10 segundos
-  greetingTimeout: 10000,
-  socketTimeout: 10000,
+  debug: true, // Habilitar logs de debug
+  logger: true, // Habilitar logger
 });
 
-// Verificar configuración del transporter al iniciar
+// Verificar configuración al iniciar
 transporter.verify((error, success) => {
   if (error) {
-    console.error("❌ Error en la configuración de email:", error);
+    console.error("❌ Error en configuración de email:", error);
   } else {
     console.log("✅ Servidor listo para enviar emails");
   }
 });
 
-// Validaciones personalizadas
+// Health check
+app.get("/", (req, res) => {
+  res.json({
+    status: "ok",
+    message: "Servidor funcionando",
+    timestamp: new Date().toISOString(),
+    env: {
+      emailUser: process.env.EMAIL_USER ? "Configurado" : "NO configurado",
+      emailPass: process.env.EMAIL_PASS ? "Configurado" : "NO configurado",
+    },
+  });
+});
+
+app.get("/health", (req, res) => {
+  res.json({
+    status: "healthy",
+    uptime: process.uptime(),
+  });
+});
+
+// Validaciones
 const validationRules = [
   body("name")
     .trim()
     .notEmpty()
     .withMessage("El nombre es requerido")
     .isLength({ min: 2, max: 100 })
-    .withMessage("El nombre debe tener entre 2 y 100 caracteres")
-    .matches(/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/)
-    .withMessage("El nombre solo puede contener letras y espacios"),
+    .withMessage("El nombre debe tener entre 2 y 100 caracteres"),
 
   body("email")
     .trim()
     .notEmpty()
     .withMessage("El email es requerido")
     .isEmail()
-    .withMessage("Debe ser un email válido")
-    .normalizeEmail()
-    .isLength({ max: 255 })
-    .withMessage("El email es demasiado largo"),
+    .withMessage("Debe ser un email válido"),
 
   body("message")
     .trim()
@@ -82,344 +98,149 @@ const validationRules = [
     .withMessage("El mensaje debe tener entre 10 y 2000 caracteres"),
 ];
 
-// Sanitización de datos
-const sanitizeInput = (text) => {
-  return text
-    .replace(/[<>]/g, "") // Eliminar < y >
-    .trim();
-};
-
-// Ruta de health check
-app.get("/", (req, res) => {
-  res.json({
-    status: "ok",
-    message: "Servidor funcionando correctamente",
-    timestamp: new Date().toISOString(),
-  });
-});
-
-app.get("/health", (req, res) => {
-  res.json({
-    status: "healthy",
-    uptime: process.uptime(),
-    timestamp: new Date().toISOString(),
-  });
-});
-
-// Ruta principal para enviar emails
+// Ruta para enviar emails
 app.post("/send-email", validationRules, async (req, res) => {
+  console.log("📧 Recibida petición de envío de email");
+  console.log("Body recibido:", req.body);
+
   try {
     // Validar errores
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log("❌ Errores de validación:", errors.array());
       return res.status(400).json({
         success: false,
         errors: errors.array(),
       });
     }
 
-    // Sanitizar datos
     const { name, email, message } = req.body;
-    const sanitizedName = sanitizeInput(name);
-    const sanitizedEmail = email.toLowerCase().trim();
-    const sanitizedMessage = sanitizeInput(message);
 
-    // Configuración del email para ti (notificación)
+    console.log("📝 Datos a enviar:", {
+      name,
+      email,
+      message: message.substring(0, 50),
+    });
+
+    // Email para ti
     const mailOptionsToMe = {
-      from: `"Formulario Portfolio" <${process.env.EMAIL_USER}>`,
+      from: process.env.EMAIL_USER,
       to: process.env.EMAIL_USER,
-      replyTo: sanitizedEmail,
-      subject: `📩 Nuevo mensaje de ${sanitizedName}`,
+      replyTo: email,
+      subject: `📩 Nuevo mensaje de ${name}`,
       html: `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <style>
-              body {
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                line-height: 1.6;
-                color: #333;
-                background-color: #f4f4f4;
-                margin: 0;
-                padding: 0;
-              }
-              .container {
-                max-width: 600px;
-                margin: 20px auto;
-                background: white;
-                border-radius: 10px;
-                overflow: hidden;
-                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-              }
-              .header {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-                padding: 30px;
-                text-align: center;
-              }
-              .header h1 {
-                margin: 0;
-                font-size: 24px;
-              }
-              .content {
-                padding: 30px;
-              }
-              .info-box {
-                background: #f8f9fa;
-                border-left: 4px solid #667eea;
-                padding: 15px;
-                margin: 15px 0;
-                border-radius: 4px;
-              }
-              .info-label {
-                font-weight: bold;
-                color: #667eea;
-                font-size: 12px;
-                text-transform: uppercase;
-                margin-bottom: 5px;
-              }
-              .info-value {
-                color: #333;
-                font-size: 16px;
-              }
-              .message-box {
-                background: #f8f9fa;
-                padding: 20px;
-                border-radius: 8px;
-                margin: 20px 0;
-                border: 1px solid #e0e0e0;
-              }
-              .footer {
-                background: #f8f9fa;
-                padding: 20px;
-                text-align: center;
-                font-size: 12px;
-                color: #666;
-                border-top: 1px solid #e0e0e0;
-              }
-            </style>
-          </head>
-          <body>
-            <div class="container">
-              <div class="header">
-                <h1>📬 Nuevo Mensaje de Contacto</h1>
-              </div>
-              <div class="content">
-                <div class="info-box">
-                  <div class="info-label">Nombre</div>
-                  <div class="info-value">${sanitizedName}</div>
-                </div>
-                <div class="info-box">
-                  <div class="info-label">Email</div>
-                  <div class="info-value">${sanitizedEmail}</div>
-                </div>
-                <div class="info-box">
-                  <div class="info-label">Mensaje</div>
-                  <div class="message-box">${sanitizedMessage}</div>
-                </div>
-              </div>
-              <div class="footer">
-                <p>Este mensaje fue enviado desde tu portafolio web</p>
-                <p>Fecha: ${new Date().toLocaleString("es-ES", {
-                  timeZone: "America/Guayaquil",
-                })}</p>
-              </div>
-            </div>
-          </body>
-        </html>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">Nuevo mensaje de contacto</h2>
+          <div style="background: #f5f5f5; padding: 20px; border-radius: 5px; margin: 20px 0;">
+            <p><strong>Nombre:</strong> ${name}</p>
+            <p><strong>Email:</strong> ${email}</p>
+            <p><strong>Mensaje:</strong></p>
+            <p>${message}</p>
+          </div>
+          <p style="color: #666; font-size: 12px;">
+            Enviado el ${new Date().toLocaleString("es-ES")}
+          </p>
+        </div>
       `,
       text: `
         Nuevo mensaje de contacto
         
-        Nombre: ${sanitizedName}
-        Email: ${sanitizedEmail}
+        Nombre: ${name}
+        Email: ${email}
         
         Mensaje:
-        ${sanitizedMessage}
+        ${message}
         
-        ---
-        Enviado desde tu portafolio web
-        Fecha: ${new Date().toLocaleString("es-ES", {
-          timeZone: "America/Guayaquil",
-        })}
+        Enviado el ${new Date().toLocaleString("es-ES")}
       `,
     };
 
-    // Configuración del email de confirmación para el usuario
+    // Email de confirmación
     const mailOptionsToUser = {
-      from: `"Michael Merino" <${process.env.EMAIL_USER}>`,
-      to: sanitizedEmail,
+      from: process.env.EMAIL_USER,
+      to: email,
       subject: "✅ He recibido tu mensaje - Michael Merino",
       html: `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <style>
-              body {
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                line-height: 1.6;
-                color: #333;
-                background-color: #f4f4f4;
-                margin: 0;
-                padding: 0;
-              }
-              .container {
-                max-width: 600px;
-                margin: 20px auto;
-                background: white;
-                border-radius: 10px;
-                overflow: hidden;
-                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-              }
-              .header {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-                padding: 40px;
-                text-align: center;
-              }
-              .header h1 {
-                margin: 0;
-                font-size: 28px;
-              }
-              .content {
-                padding: 40px 30px;
-              }
-              .greeting {
-                font-size: 18px;
-                color: #333;
-                margin-bottom: 20px;
-              }
-              .message {
-                font-size: 16px;
-                line-height: 1.8;
-                color: #555;
-                margin: 20px 0;
-              }
-              .cta-box {
-                background: #f8f9fa;
-                padding: 20px;
-                border-radius: 8px;
-                margin: 25px 0;
-                text-align: center;
-              }
-              .footer {
-                background: #f8f9fa;
-                padding: 30px;
-                text-align: center;
-                border-top: 1px solid #e0e0e0;
-              }
-              .social-links {
-                margin: 15px 0;
-              }
-              .social-links a {
-                color: #667eea;
-                text-decoration: none;
-                margin: 0 10px;
-                font-size: 14px;
-              }
-              .emoji {
-                font-size: 24px;
-              }
-            </style>
-          </head>
-          <body>
-            <div class="container">
-              <div class="header">
-                <div class="emoji">✅</div>
-                <h1>¡Mensaje Recibido!</h1>
-              </div>
-              <div class="content">
-                <div class="greeting">
-                  Hola <strong>${sanitizedName}</strong>,
-                </div>
-                <div class="message">
-                  <p>¡Gracias por ponerte en contacto conmigo! He recibido tu mensaje correctamente y me pondré en contacto contigo lo antes posible.</p>
-                  <p>Normalmente respondo en un plazo de 24-48 horas. Mientras tanto, puedes conocer más sobre mi trabajo en mi portfolio.</p>
-                </div>
-                <div class="cta-box">
-                  <p style="margin: 0; color: #666; font-size: 14px;">
-                    📧 <strong>Recibido:</strong> ${sanitizedMessage.substring(
-                      0,
-                      100
-                    )}${sanitizedMessage.length > 100 ? "..." : ""}
-                  </p>
-                </div>
-              </div>
-              <div class="footer">
-                <p style="margin: 10px 0; color: #333; font-weight: bold;">Michael Merino</p>
-                <p style="margin: 10px 0; color: #666;">Desarrollador Full Stack</p>
-                <div class="social-links">
-                  <a href="https://github.com/MichaelMerino11">GitHub</a> |
-                  <a href="https://www.linkedin.com/in/michael-merino-0b7871207/">LinkedIn</a>
-                </div>
-                <p style="margin-top: 20px; font-size: 12px; color: #999;">
-                  Este es un email automático, por favor no respondas a este mensaje.
-                </p>
-              </div>
-            </div>
-          </body>
-        </html>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #667eea;">¡Gracias por contactarme!</h2>
+          <p>Hola <strong>${name}</strong>,</p>
+          <p>He recibido tu mensaje y te responderé lo antes posible.</p>
+          <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <p style="margin: 0; font-size: 14px; color: #666;">
+              Tu mensaje: "${message.substring(0, 100)}${
+        message.length > 100 ? "..." : ""
+      }"
+            </p>
+          </div>
+          <p>Saludos,<br><strong>Michael Merino</strong></p>
+          <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
+          <p style="font-size: 12px; color: #999;">
+            GitHub: <a href="https://github.com/MichaelMerino11">MichaelMerino11</a><br>
+            LinkedIn: <a href="https://www.linkedin.com/in/michael-merino-0b7871207/">Michael Merino</a>
+          </p>
+        </div>
       `,
       text: `
-        Hola ${sanitizedName},
+        Hola ${name},
         
-        ¡Gracias por ponerte en contacto conmigo! He recibido tu mensaje correctamente y me pondré en contacto contigo lo antes posible.
+        ¡Gracias por contactarme! He recibido tu mensaje y te responderé lo antes posible.
         
-        Tu mensaje:
-        ${sanitizedMessage}
+        Tu mensaje: ${message}
         
         Saludos,
         Michael Merino
-        Desarrollador Full Stack
-        
-        GitHub: https://github.com/MichaelMerino11
-        LinkedIn: https://www.linkedin.com/in/michael-merino-0b7871207/
       `,
     };
 
-    // Enviar ambos emails
+    console.log("📤 Enviando email a ti...");
     await transporter.sendMail(mailOptionsToMe);
-    await transporter.sendMail(mailOptionsToUser);
+    console.log("✅ Email enviado a ti");
 
-    console.log(`✅ Email enviado desde: ${sanitizedEmail}`);
+    console.log("📤 Enviando confirmación al usuario...");
+    await transporter.sendMail(mailOptionsToUser);
+    console.log("✅ Confirmación enviada al usuario");
 
     res.status(200).json({
       success: true,
-      message:
-        "Mensaje enviado exitosamente. Recibirás una confirmación en tu email.",
+      message: "Mensaje enviado exitosamente",
     });
   } catch (error) {
-    console.error("❌ Error al enviar email:", error);
+    console.error("❌ ERROR COMPLETO:", error);
+    console.error("Stack:", error.stack);
+
     res.status(500).json({
       success: false,
-      message: "Error al enviar el mensaje. Por favor, intenta nuevamente.",
-      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+      message: "Error al enviar el mensaje",
+      error: error.message,
+      details: error.toString(),
     });
   }
 });
 
-// Manejo de rutas no encontradas
+// 404
 app.use((req, res) => {
+  console.log(`❌ Ruta no encontrada: ${req.method} ${req.path}`);
   res.status(404).json({
     success: false,
     message: "Ruta no encontrada",
+    path: req.path,
   });
 });
 
-// Manejo de errores global
+// Error handler
 app.use((err, req, res, next) => {
-  console.error("Error:", err);
+  console.error("❌ Error global:", err);
   res.status(500).json({
     success: false,
     message: "Error interno del servidor",
-    error: process.env.NODE_ENV === "development" ? err.message : undefined,
+    error: err.message,
   });
 });
 
-// Iniciar servidor
 app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
-  console.log(`📧 Email configurado: ${process.env.EMAIL_USER}`);
+  console.log(`📧 Email: ${process.env.EMAIL_USER}`);
+  console.log(`🔑 Pass configurado: ${process.env.EMAIL_PASS ? "SÍ" : "NO"}`);
 });
 
 export default app;
