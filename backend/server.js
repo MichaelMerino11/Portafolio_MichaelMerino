@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import { body, validationResult } from "express-validator";
 import dotenv from "dotenv";
 
@@ -9,60 +9,35 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// CORS más permisivo para debug
+// Inicializar Resend
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+// CORS
 app.use(
   cors({
-    origin: "*", // Temporalmente permite todo para debug
+    origin: "*",
     methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
+    allowedHeaders: ["Content-Type"],
   })
 );
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Log de todas las peticiones
+// Log de peticiones
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
-  console.log("Body:", req.body);
   next();
-});
-
-// Configuración de Nodemailer para Gmail
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-  tls: {
-    rejectUnauthorized: false,
-  },
-  debug: true, // Habilitar logs de debug
-  logger: true, // Habilitar logger
-});
-
-// Verificar configuración al iniciar
-transporter.verify((error, success) => {
-  if (error) {
-    console.error("❌ Error en configuración de email:", error);
-  } else {
-    console.log("✅ Servidor listo para enviar emails");
-  }
 });
 
 // Health check
 app.get("/", (req, res) => {
   res.json({
     status: "ok",
-    message: "Servidor funcionando",
+    message: "Servidor funcionando con Resend",
     timestamp: new Date().toISOString(),
     env: {
-      emailUser: process.env.EMAIL_USER ? "Configurado" : "NO configurado",
-      emailPass: process.env.EMAIL_PASS ? "Configurado" : "NO configurado",
+      resendKey: process.env.RESEND_API_KEY ? "Configurado" : "NO configurado",
     },
   });
 });
@@ -101,7 +76,6 @@ const validationRules = [
 // Ruta para enviar emails
 app.post("/send-email", validationRules, async (req, res) => {
   console.log("📧 Recibida petición de envío de email");
-  console.log("Body recibido:", req.body);
 
   try {
     // Validar errores
@@ -116,131 +90,261 @@ app.post("/send-email", validationRules, async (req, res) => {
 
     const { name, email, message } = req.body;
 
-    console.log("📝 Datos a enviar:", {
-      name,
-      email,
-      message: message.substring(0, 50),
-    });
+    console.log("📝 Datos:", { name, email });
 
-    // Email para ti
-    const mailOptionsToMe = {
-      from: process.env.EMAIL_USER,
-      to: process.env.EMAIL_USER,
-      replyTo: email,
+    // Email para ti (notificación)
+    const emailToMe = await resend.emails.send({
+      from: "Portafolio <onboarding@resend.dev>", // Email verificado de Resend
+      to: "maikijunior9@gmail.com", // Tu email personal
+      reply_to: email, // Para que puedas responder directamente
       subject: `📩 Nuevo mensaje de ${name}`,
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #333;">Nuevo mensaje de contacto</h2>
-          <div style="background: #f5f5f5; padding: 20px; border-radius: 5px; margin: 20px 0;">
-            <p><strong>Nombre:</strong> ${name}</p>
-            <p><strong>Email:</strong> ${email}</p>
-            <p><strong>Mensaje:</strong></p>
-            <p>${message}</p>
-          </div>
-          <p style="color: #666; font-size: 12px;">
-            Enviado el ${new Date().toLocaleString("es-ES")}
-          </p>
-        </div>
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <style>
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                line-height: 1.6;
+                color: #333;
+                max-width: 600px;
+                margin: 0 auto;
+                padding: 20px;
+              }
+              .header {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                padding: 30px;
+                border-radius: 10px 10px 0 0;
+                text-align: center;
+              }
+              .content {
+                background: #ffffff;
+                padding: 30px;
+                border: 1px solid #e0e0e0;
+                border-top: none;
+              }
+              .info-box {
+                background: #f8f9fa;
+                border-left: 4px solid #667eea;
+                padding: 15px;
+                margin: 15px 0;
+                border-radius: 4px;
+              }
+              .label {
+                font-weight: bold;
+                color: #667eea;
+                font-size: 12px;
+                text-transform: uppercase;
+                margin-bottom: 5px;
+              }
+              .value {
+                color: #333;
+                font-size: 16px;
+              }
+              .message-box {
+                background: #f8f9fa;
+                padding: 20px;
+                border-radius: 8px;
+                margin: 20px 0;
+                border: 1px solid #e0e0e0;
+                white-space: pre-wrap;
+                word-wrap: break-word;
+              }
+              .footer {
+                background: #f8f9fa;
+                padding: 20px;
+                text-align: center;
+                font-size: 12px;
+                color: #666;
+                border-radius: 0 0 10px 10px;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <h1 style="margin: 0;">📬 Nuevo Mensaje</h1>
+            </div>
+            <div class="content">
+              <div class="info-box">
+                <div class="label">Nombre</div>
+                <div class="value">${name}</div>
+              </div>
+              <div class="info-box">
+                <div class="label">Email</div>
+                <div class="value"><a href="mailto:${email}">${email}</a></div>
+              </div>
+              <div class="info-box">
+                <div class="label">Mensaje</div>
+                <div class="message-box">${message}</div>
+              </div>
+            </div>
+            <div class="footer">
+              <p>Mensaje recibido desde tu portafolio</p>
+              <p>${new Date().toLocaleString("es-ES", {
+                timeZone: "America/Guayaquil",
+              })}</p>
+            </div>
+          </body>
+        </html>
       `,
-      text: `
-        Nuevo mensaje de contacto
-        
-        Nombre: ${name}
-        Email: ${email}
-        
-        Mensaje:
-        ${message}
-        
-        Enviado el ${new Date().toLocaleString("es-ES")}
-      `,
-    };
+    });
 
-    // Email de confirmación
-    const mailOptionsToUser = {
-      from: process.env.EMAIL_USER,
+    console.log("✅ Email enviado a ti:", emailToMe.data?.id);
+
+    // Email de confirmación al usuario
+    const emailToUser = await resend.emails.send({
+      from: "Michael Merino <onboarding@resend.dev>",
       to: email,
-      subject: "✅ He recibido tu mensaje - Michael Merino",
+      subject: "✅ He recibido tu mensaje",
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #667eea;">¡Gracias por contactarme!</h2>
-          <p>Hola <strong>${name}</strong>,</p>
-          <p>He recibido tu mensaje y te responderé lo antes posible.</p>
-          <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0;">
-            <p style="margin: 0; font-size: 14px; color: #666;">
-              Tu mensaje: "${message.substring(0, 100)}${
-        message.length > 100 ? "..." : ""
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8">
+            <style>
+              body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+                line-height: 1.6;
+                color: #333;
+                max-width: 600px;
+                margin: 0 auto;
+                padding: 20px;
+              }
+              .header {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                padding: 40px;
+                border-radius: 10px 10px 0 0;
+                text-align: center;
+              }
+              .content {
+                background: #ffffff;
+                padding: 40px 30px;
+                border: 1px solid #e0e0e0;
+                border-top: none;
+              }
+              .emoji {
+                font-size: 48px;
+                margin-bottom: 10px;
+              }
+              .message {
+                font-size: 16px;
+                line-height: 1.8;
+                color: #555;
+                margin: 20px 0;
+              }
+              .quote-box {
+                background: #f8f9fa;
+                padding: 20px;
+                border-left: 4px solid #667eea;
+                border-radius: 4px;
+                margin: 25px 0;
+                font-style: italic;
+                color: #666;
+              }
+              .footer {
+                background: #f8f9fa;
+                padding: 30px;
+                text-align: center;
+                border-radius: 0 0 10px 10px;
+              }
+              .social-links {
+                margin: 20px 0;
+              }
+              .social-links a {
+                color: #667eea;
+                text-decoration: none;
+                margin: 0 15px;
+                font-weight: 500;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <div class="emoji">✅</div>
+              <h1 style="margin: 0; font-size: 28px;">¡Mensaje Recibido!</h1>
+            </div>
+            <div class="content">
+              <p style="font-size: 18px; color: #333;">
+                Hola <strong>${name}</strong>,
+              </p>
+              <div class="message">
+                <p>¡Gracias por ponerte en contacto conmigo! He recibido tu mensaje correctamente.</p>
+                <p>Me pondré en contacto contigo lo antes posible, generalmente respondo en un plazo de 24-48 horas.</p>
+              </div>
+              <div class="quote-box">
+                <strong>Tu mensaje:</strong><br><br>
+                "${message.substring(0, 150)}${
+        message.length > 150 ? "..." : ""
       }"
-            </p>
-          </div>
-          <p>Saludos,<br><strong>Michael Merino</strong></p>
-          <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
-          <p style="font-size: 12px; color: #999;">
-            GitHub: <a href="https://github.com/MichaelMerino11">MichaelMerino11</a><br>
-            LinkedIn: <a href="https://www.linkedin.com/in/michael-merino-0b7871207/">Michael Merino</a>
-          </p>
-        </div>
+              </div>
+              <p style="margin-top: 30px; color: #666;">
+                Mientras tanto, puedes conocer más sobre mi trabajo en mis redes:
+              </p>
+            </div>
+            <div class="footer">
+              <p style="margin: 10px 0; color: #333; font-weight: bold; font-size: 18px;">
+                Michael Merino
+              </p>
+              <p style="margin: 10px 0; color: #666;">
+                Desarrollador Full Stack
+              </p>
+              <div class="social-links">
+                <a href="https://github.com/MichaelMerino11">GitHub</a>
+                <a href="https://www.linkedin.com/in/michael-merino-0b7871207/">LinkedIn</a>
+              </div>
+              <p style="margin-top: 30px; font-size: 12px; color: #999;">
+                Este es un correo automático. Para cualquier consulta adicional,<br>
+                simplemente responde a este email.
+              </p>
+            </div>
+          </body>
+        </html>
       `,
-      text: `
-        Hola ${name},
-        
-        ¡Gracias por contactarme! He recibido tu mensaje y te responderé lo antes posible.
-        
-        Tu mensaje: ${message}
-        
-        Saludos,
-        Michael Merino
-      `,
-    };
+    });
 
-    console.log("📤 Enviando email a ti...");
-    await transporter.sendMail(mailOptionsToMe);
-    console.log("✅ Email enviado a ti");
-
-    console.log("📤 Enviando confirmación al usuario...");
-    await transporter.sendMail(mailOptionsToUser);
-    console.log("✅ Confirmación enviada al usuario");
+    console.log("✅ Confirmación enviada al usuario:", emailToUser.data?.id);
 
     res.status(200).json({
       success: true,
-      message: "Mensaje enviado exitosamente",
+      message:
+        "Mensaje enviado exitosamente. Recibirás una confirmación en tu email.",
     });
   } catch (error) {
-    console.error("❌ ERROR COMPLETO:", error);
-    console.error("Stack:", error.stack);
+    console.error("❌ ERROR:", error);
 
     res.status(500).json({
       success: false,
-      message: "Error al enviar el mensaje",
+      message: "Error al enviar el mensaje. Por favor, intenta nuevamente.",
       error: error.message,
-      details: error.toString(),
     });
   }
 });
 
 // 404
 app.use((req, res) => {
-  console.log(`❌ Ruta no encontrada: ${req.method} ${req.path}`);
   res.status(404).json({
     success: false,
     message: "Ruta no encontrada",
-    path: req.path,
   });
 });
 
 // Error handler
 app.use((err, req, res, next) => {
-  console.error("❌ Error global:", err);
+  console.error("Error:", err);
   res.status(500).json({
     success: false,
     message: "Error interno del servidor",
-    error: err.message,
   });
 });
 
 app.listen(PORT, () => {
   console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
-  console.log(`📧 Email: ${process.env.EMAIL_USER}`);
-  console.log(`🔑 Pass configurado: ${process.env.EMAIL_PASS ? "SÍ" : "NO"}`);
+  console.log(
+    `📧 Resend configurado: ${process.env.RESEND_API_KEY ? "SÍ" : "NO"}`
+  );
 });
 
 export default app;
